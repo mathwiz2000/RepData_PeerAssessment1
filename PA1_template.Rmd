@@ -1,25 +1,142 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
+author: Jakub Duda
 output: 
   html_document:
     keep_md: true
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,fig.path="figure/assign1-")
+library(dplyr)
+library(lubridate)
+```
 
 ## Loading and preprocessing the data
 
-
+```{r}
+data<-read.csv('activity.csv')
+head(data)
+```
 
 ## What is mean total number of steps taken per day?
 
+Let's plot the histogram of average daily steps:
 
+```{r}
+data_sum<-data %>% na.omit() %>% group_by(date) %>% summarize(suma=sum(steps))
+hist(data_sum[[2]],main="Histogram of Total Daily Steps",xlab="Number of Steps",breaks=10)
+```
+
+The mean number of steps is
+
+```{r}
+mean(data_sum$suma)
+```
+
+and the median is
+
+```{r}
+median(data_sum$suma)
+```
 
 ## What is the average daily activity pattern?
 
+```{r}
+data_mean_interval<-data %>% na.omit() %>% group_by(interval) %>% summarize(mean=mean(steps))
+plot((1:288)*5,data_mean_interval[,2][[1]],type="l",col="blue",
+     xlab="Minutes Since Day Start",ylab="Average Number of Steps",
+     main="AverageSteps Per 5 Minute Intervals")
+```
 
+The maximum number of steps on average is in the interval:
+
+```{r}
+idx <- which.max(data_mean_interval$mean)
+max_int <- data_mean_interval[idx,]$interval
+print(max_int)
+```
 
 ## Imputing missing values
 
+The number of missing values is:
 
+```{r}
+sum(is.na(data$steps))
+```
+
+We will replace the missing number of steps by the corresponding average for the given 5-minute interval.
+
+```{r}
+data_fixed<-data
+for (i in 1:nrow(data_fixed))
+{
+  if (is.na(data_fixed[i,]$steps))
+  {
+    data_fixed[i,]$steps <-
+      data_mean_interval[
+        data_mean_interval$interval==data_fixed[i,]$interval,]$mean
+  }
+}
+```
+
+Let's plot a histogram of the data with imputed values:
+
+```{r}
+data_sum_fixed<- data_fixed %>% na.omit()  %>% group_by(date) %>%  summarize(suma=sum(steps))
+hist(data_sum_fixed[[2]],
+     main="Histogram of Total Daily Steps (Data Fixed)",
+     xlab="Number of Steps",
+     breaks=10)
+```
+
+Let's compare the means and medians of the original and imputed data:
+
+```{r}
+typeofval<-c("mean","median","mean","median")
+datatype<-c("original","original","imputed","imputed")
+vals<-c(mean(data_sum$suma),
+        median(data_sum$suma),
+        mean(data_sum_fixed$suma),
+        median(data_sum_fixed$suma))
+df<-data.frame(type_of_analytic=typeofval,data=datatype,value=vals)
+df
+```
+
+The mean remains the same after imputing, while the median for the imputed data increases slightly.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+We add a weekday/weekend factor and compare the patterns on the imputed data:
+
+```{r}
+data_fixed$weekday <- weekdays(ymd(as.character(data_fixed$date)))
+data_fixed$dayType="NA"
+for (i in 1:nrow(data_fixed))
+{
+  if ((data_fixed[i,]$weekday=="Saturday") | (data_fixed[i,]$weekday=="Sunday"))
+  {
+    data_fixed[i,]$dayType="weekend"
+  } else
+  {
+    data_fixed[i,]$dayType="weekday"
+  } 
+}
+```
+
+Finally, we compare weekday and weekend activity:
+```{r}
+par(mfrow=c(2,1))
+
+data_weekday<-data_fixed %>% filter(dayType=="weekday") %>% group_by(interval) %>% summarize(mean=mean(steps))
+plot((1:288)*5,data_weekday[,2][[1]],type="l",col="blue",
+     xlab="Minutes Since Day Start",ylab="Average Number of Steps",
+     main="Weekday Average Steps")
+
+data_weekend<-data_fixed %>% filter(dayType=="weekend") %>% group_by(interval) %>% summarize(mean=mean(steps))
+plot((1:288)*5,data_weekend[,2][[1]],type="l",col="blue",
+     xlab="Minutes Since Day Start",ylab="Average Number of Steps",
+     main="Weekend Average Steps")
+```
+
+The profiles of weekday and weekend activity differ. Weekends correspond to lower peak activity, while activity is more uniformly spread during wake-time hours.
